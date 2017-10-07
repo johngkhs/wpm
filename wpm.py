@@ -36,7 +36,7 @@ def readlines_from_file_or_stdin(input_filepath):
         try:
             input_file = open(input_filepath, 'r')
         except EnvironmentError:
-            raise ExitFailure(os.EX_NOINPUT, '{}: No such file or directory'.format(args.input_filepath))
+            raise ExitFailure(os.EX_NOINPUT, '{}: No such file or directory'.format(input_filepath))
         with input_file:
             return input_file.readlines()
     else:
