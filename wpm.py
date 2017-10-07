@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import curses
 import os
 import signal
 import sys
@@ -27,8 +28,42 @@ class TerminalDimensions:
         self.cols = term_dimensions[1]
 
 
-def run_curses(lines):
-    print(lines)
+def draw_screen(screen, next_char_index, term_dims, lines):
+    screen.move(0, 0)
+    screen.erase()
+    row = 0
+    for line in lines:
+        for wrapped_line in wrap(line, term_dims.cols):
+            if row == term_dims.rows:
+                break
+            screen.addstr(row, 0, wrapped_line)
+            row += 1
+    screen.move(0, next_char_index)
+    screen.refresh()
+
+
+def wrap(line, cols):
+    return [line[i:i + cols] for i in range(0, len(line), cols)]
+
+
+def run_curses(screen, lines):
+    curses.use_default_colors()
+    VERY_VISIBLE = 2
+    curses.curs_set(VERY_VISIBLE)
+    screen.timeout(50)
+    term_dims = TerminalDimensions(screen)
+    next_char_index = 0
+    while True:
+        try:
+            term_dims.update(screen)
+            draw_screen(screen, next_char_index, term_dims, lines)
+            user_input = screen.getch()
+            if user_input == ord(lines[0][next_char_index]):
+                next_char_index += 1
+            else:
+                pass
+        except KeyboardInterrupt:
+            return os.EX_OK
 
 
 def readlines_from_file_or_stdin(input_filepath):
@@ -43,6 +78,10 @@ def readlines_from_file_or_stdin(input_filepath):
         return sys.stdin.readlines()
 
 
+def sanitize_lines(lines):
+    return [line.replace('\t', ' ').rstrip() for line in filter(lambda line: line != '\n', lines)]
+
+
 def run(args):
     description = 'A command line words per minute test'
     arg_parser = argparse.ArgumentParser(description=description)
@@ -52,7 +91,8 @@ def run(args):
         arg_parser.print_help()
         return os.EX_USAGE
     lines = readlines_from_file_or_stdin(args.input_filepath)
-    return run_curses(lines)
+    sanitized_lines = sanitize_lines(lines)
+    return curses.wrapper(run_curses, sanitized_lines)
 
 
 def main():
