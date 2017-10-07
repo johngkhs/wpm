@@ -28,16 +28,15 @@ class TerminalDimensions:
         self.cols = term_dimensions[1]
 
 
-def draw_screen(screen, next_char_index, term_dims, lines):
+def draw_screen(screen, next_char_index, term_dims, input_str):
     screen.move(0, 0)
     screen.erase()
     row = 0
-    for line in lines:
-        for wrapped_line in wrap(line, term_dims.cols):
-            if row == term_dims.rows:
-                break
-            screen.addstr(row, 0, wrapped_line)
-            row += 1
+    for wrapped_line in wrap(input_str, term_dims.cols):
+        if row == term_dims.rows:
+            break
+        screen.addstr(row, 0, wrapped_line)
+        row += 1
     screen.move(0, next_char_index)
     screen.refresh()
 
@@ -46,7 +45,7 @@ def wrap(line, cols):
     return [line[i:i + cols] for i in range(0, len(line), cols)]
 
 
-def run_curses(screen, lines):
+def run_curses(screen, input_str):
     curses.use_default_colors()
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
@@ -56,9 +55,9 @@ def run_curses(screen, lines):
     while True:
         try:
             term_dims.update(screen)
-            draw_screen(screen, next_char_index, term_dims, lines)
+            draw_screen(screen, next_char_index, term_dims, input_str)
             user_input = screen.getch()
-            if user_input == ord(lines[0][next_char_index]):
+            if user_input == ord(input_str[next_char_index]):
                 next_char_index += 1
             else:
                 pass
@@ -78,8 +77,11 @@ def readlines_from_file_or_stdin(input_filepath):
         return sys.stdin.readlines()
 
 
-def sanitize_lines(lines):
-    return [line.replace('\t', ' ').rstrip() for line in filter(lambda line: line != '\n', lines)]
+def concat_lines(lines):
+    words = []
+    for line in lines:
+        words += line.replace('\t', ' ').rstrip().split()
+    return ' '.join(words)
 
 
 def run(args):
@@ -91,8 +93,8 @@ def run(args):
         arg_parser.print_help()
         return os.EX_USAGE
     lines = readlines_from_file_or_stdin(args.input_filepath)
-    sanitized_lines = sanitize_lines(lines)
-    return curses.wrapper(run_curses, sanitized_lines)
+    input_str = concat_lines(lines)
+    return curses.wrapper(run_curses, input_str)
 
 
 def main():
