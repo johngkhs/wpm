@@ -28,16 +28,40 @@ class TerminalDimensions:
         self.cols = term_dimensions[1]
 
 
-def draw_screen(screen, next_char_index, term_dims, input_str):
+class TypingProgress:
+    def __init__(self, input_str):
+        self.input_str = input_str
+        self.input_str_len = len(input_str)
+        self.next_char_index = 0
+
+    def check_user_input(self, user_input):
+        KEY_DELETE = 127
+        if user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
+            self.next_char_index = max(0, self.next_char_index - 1)
+        elif user_input == ord(self.input_str[self.next_char_index]):
+            self.next_char_index = min(self.input_str_len - 1, self.next_char_index + 1)
+
+
+def get_cursor_position(typing_progress, cols):
+    chars_left = typing_progress.next_char_index
+    for row, wrapped_line in enumerate(wrap(typing_progress.input_str, cols)):
+        chars_left -= len(wrapped_line)
+        if chars_left < 0:
+            return (row, chars_left + len(wrapped_line))
+    raise ExitFailure('Cursor position fell off the end of the screen')
+
+
+def draw_screen(screen, term_dims, typing_progress):
     screen.move(0, 0)
     screen.erase()
     row = 0
-    for wrapped_line in wrap(input_str, term_dims.cols):
+    for wrapped_line in wrap(typing_progress.input_str, term_dims.cols):
         if row == term_dims.rows:
             break
         screen.addstr(row, 0, wrapped_line)
         row += 1
-    screen.move(0, next_char_index)
+    cursor_row, cursor_col = get_cursor_position(typing_progress, term_dims.cols)
+    screen.move(cursor_row, cursor_col)
     screen.refresh()
 
 
@@ -51,16 +75,13 @@ def run_curses(screen, input_str):
     curses.curs_set(VERY_VISIBLE)
     screen.timeout(50)
     term_dims = TerminalDimensions(screen)
-    next_char_index = 0
+    typing_progress = TypingProgress(input_str)
     while True:
         try:
             term_dims.update(screen)
-            draw_screen(screen, next_char_index, term_dims, input_str)
+            draw_screen(screen, term_dims, typing_progress)
             user_input = screen.getch()
-            if user_input == ord(input_str[next_char_index]):
-                next_char_index += 1
-            else:
-                pass
+            typing_progress.check_user_input(user_input)
         except KeyboardInterrupt:
             return os.EX_OK
 
