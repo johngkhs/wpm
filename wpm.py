@@ -5,6 +5,7 @@ import curses
 import os
 import signal
 import sys
+import time
 
 
 class ExitSuccess(Exception):
@@ -28,18 +29,41 @@ class TerminalDimensions:
         self.cols = term_dimensions[1]
 
 
+def calculate_wpm(typing_progress, time_elapsed):
+    CHARS_PER_WORD = 5.0
+    SEC_PER_MIN = 60.0
+    words_typed = (typing_progress.get_num_correct_chars_typed() / CHARS_PER_WORD)
+    minutes_elapsed = (time_elapsed / SEC_PER_MIN)
+    return int(words_typed / minutes_elapsed)
+
+
 class TypingProgress:
     def __init__(self, input_str):
         self.input_str = input_str
         self.input_str_len = len(input_str)
+        self.incorrect_char_indexes = []
         self.next_char_index = 0
 
-    def check_user_input(self, user_input):
+    def get_num_incorrect_chars_typed(self):
+        return len(self.incorrect_char_indexes)
+
+    def get_num_correct_chars_typed(self):
+        return self.next_char_index - self.get_num_incorrect_chars_typed()
+
+    def on_user_input(self, user_input):
         KEY_DELETE = 127
         if user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
+            if self.next_char_index in self.incorrect_char_indexes:
+                self.incorrect_char_indexes.remove(self.next_char_index)
             self.next_char_index = max(0, self.next_char_index - 1)
-        elif user_input == ord(self.input_str[self.next_char_index]):
-            self.next_char_index = min(self.input_str_len - 1, self.next_char_index + 1)
+        else:
+            next_char_expected = self.input_str[self.next_char_index]
+            if user_input != ord(next_char_expected):
+                self.incorrect_char_indexes.append(self.next_char_index)
+            self.next_char_index += 1
+            if self.next_char_index == self.input_str_len:
+                return True
+        return False
 
 
 def get_cursor_position(typing_progress, cols):
@@ -51,7 +75,7 @@ def get_cursor_position(typing_progress, cols):
     raise ExitFailure('Cursor position fell off the end of the screen')
 
 
-def draw_screen(screen, term_dims, typing_progress):
+def draw_screen(screen, term_dims, typing_progress, start_time, curr_time):
     screen.move(0, 0)
     screen.erase()
     row = 0
@@ -60,6 +84,12 @@ def draw_screen(screen, term_dims, typing_progress):
             break
         screen.addstr(row, 0, wrapped_line)
         row += 1
+    screen.move(term_dims.rows, 0)
+    if start_time:
+        time_elapsed = (curr_time - start_time)
+        screen.addstr(' WPM: ' + str(calculate_wpm(typing_progress, time_elapsed)))
+    else:
+        screen.addstr(' Press any key to start, or Ctrl-C to exit'[:term_dims.cols - 1])
     cursor_row, cursor_col = get_cursor_position(typing_progress, term_dims.cols)
     screen.move(cursor_row, cursor_col)
     screen.refresh()
@@ -73,15 +103,25 @@ def run_curses(screen, input_str):
     curses.use_default_colors()
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
+    NO_INPUT = -1
     screen.timeout(50)
     term_dims = TerminalDimensions(screen)
     typing_progress = TypingProgress(input_str)
+    start_time = None
     while True:
         try:
             term_dims.update(screen)
-            draw_screen(screen, term_dims, typing_progress)
+            draw_screen(screen, term_dims, typing_progress, start_time, time.time())
             user_input = screen.getch()
-            typing_progress.check_user_input(user_input)
+            if user_input == NO_INPUT:
+                continue
+            if not start_time:
+                start_time = time.time()
+            if typing_progress.on_user_input(user_input):
+                screen.timeout(0)
+                # press any key to continue
+                screen.getch()
+                return os.EX_OK
         except KeyboardInterrupt:
             return os.EX_OK
 
