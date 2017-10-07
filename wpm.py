@@ -5,6 +5,7 @@ import curses
 import os
 import signal
 import sys
+import textwrap
 import time
 
 
@@ -29,12 +30,23 @@ class TerminalDimensions:
         self.cols = term_dimensions[1]
 
 
-def calculate_wpm(typing_progress, time_elapsed):
-    CHARS_PER_WORD = 5.0
-    SEC_PER_MIN = 60.0
-    words_typed = (typing_progress.get_num_correct_chars_typed() / CHARS_PER_WORD)
-    minutes_elapsed = (time_elapsed / SEC_PER_MIN)
-    return int(words_typed / minutes_elapsed)
+class WpmCalculator:
+    def __init__(self, typing_progress, time_elapsed):
+        self.CHARS_PER_WORD = 5.0
+        SEC_PER_MIN = 60.0
+        self.minutes_elapsed = time_elapsed / SEC_PER_MIN
+        self.typing_progress = typing_progress
+
+    def compute_wpm_str(self):
+        num_incorrect_chars_typed = self.typing_progress.get_num_incorrect_chars_typed()
+        return 'Gross WPM: {} Errors: {} Net Wpm: {}'.format(self._calculate_gross_wpm(), num_incorrect_chars_typed, self._calculate_net_wpm())
+
+    def _calculate_gross_wpm(self):
+        words_typed = (self.typing_progress.get_num_correct_chars_typed() / self.CHARS_PER_WORD)
+        return int(words_typed / self.minutes_elapsed)
+
+    def _calculate_net_wpm(self):
+        return max(0, int(self._calculate_gross_wpm() - (self.typing_progress.get_num_incorrect_chars_typed() / self.minutes_elapsed)))
 
 
 class TypingProgress:
@@ -68,7 +80,7 @@ class TypingProgress:
 
 def get_cursor_position(typing_progress, cols):
     chars_left = typing_progress.next_char_index
-    for row, wrapped_line in enumerate(wrap(typing_progress.input_str, cols)):
+    for row, wrapped_line in enumerate(textwrap.wrap(typing_progress.input_str, cols)):
         chars_left -= len(wrapped_line)
         if chars_left < 0:
             return (row, chars_left + len(wrapped_line))
@@ -79,7 +91,7 @@ def draw_screen(screen, term_dims, typing_progress, start_time, curr_time):
     screen.move(0, 0)
     screen.erase()
     row = 0
-    for wrapped_line in wrap(typing_progress.input_str, term_dims.cols):
+    for wrapped_line in textwrap.wrap(typing_progress.input_str, term_dims.cols):
         if row == term_dims.rows:
             break
         screen.addstr(row, 0, wrapped_line)
@@ -87,16 +99,13 @@ def draw_screen(screen, term_dims, typing_progress, start_time, curr_time):
     screen.move(term_dims.rows, 0)
     if start_time:
         time_elapsed = (curr_time - start_time)
-        screen.addstr(' WPM: ' + str(calculate_wpm(typing_progress, time_elapsed)))
+        wpm_calculator = WpmCalculator(typing_progress, time_elapsed)
+        screen.addstr(wpm_calculator.compute_wpm_str())
     else:
         screen.addstr(' Press any key to start, or Ctrl-C to exit'[:term_dims.cols - 1])
     cursor_row, cursor_col = get_cursor_position(typing_progress, term_dims.cols)
     screen.move(cursor_row, cursor_col)
     screen.refresh()
-
-
-def wrap(line, cols):
-    return [line[i:i + cols] for i in range(0, len(line), cols)]
 
 
 def run_curses(screen, input_str):
