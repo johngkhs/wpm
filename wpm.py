@@ -30,80 +30,38 @@ class TerminalDimensions:
         self.cols = term_dimensions[1]
 
 
-class WpmCalculator:
-    def __init__(self, typing_progress, time_elapsed):
-        self.CHARS_PER_WORD = 5.0
-        SEC_PER_MIN = 60.0
-        self.minutes_elapsed = time_elapsed / SEC_PER_MIN
-        self.typing_progress = typing_progress
-
-    def compute_wpm_str(self):
-        num_incorrect_chars_typed = self.typing_progress.get_num_incorrect_chars_typed()
-        return 'Gross WPM: {} Errors: {} Net Wpm: {}'.format(self._calculate_gross_wpm(), num_incorrect_chars_typed, self._calculate_net_wpm())
-
-    def _calculate_gross_wpm(self):
-        words_typed = (self.typing_progress.get_num_correct_chars_typed() / self.CHARS_PER_WORD)
-        return int(words_typed / self.minutes_elapsed)
-
-    def _calculate_net_wpm(self):
-        return max(0, int(self._calculate_gross_wpm() - (self.typing_progress.get_num_incorrect_chars_typed() / self.minutes_elapsed)))
+def minutes_elapsed(seconds_elapsed):
+    SECONDS_PER_MINUTE = 60.0
+    return (seconds_elapsed / SECONDS_PER_MINUTE)
 
 
-class TypingProgress:
-    def __init__(self, input_str):
-        self.input_str = input_str
-        self.input_str_len = len(input_str)
-        self.incorrect_char_indexes = []
-        self.next_char_index = 0
-
-    def get_num_incorrect_chars_typed(self):
-        return len(self.incorrect_char_indexes)
-
-    def get_num_correct_chars_typed(self):
-        return self.next_char_index - self.get_num_incorrect_chars_typed()
-
-    def on_user_input(self, user_input):
-        KEY_DELETE = 127
-        if user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
-            if self.next_char_index in self.incorrect_char_indexes:
-                self.incorrect_char_indexes.remove(self.next_char_index)
-            self.next_char_index = max(0, self.next_char_index - 1)
-        else:
-            next_char_expected = self.input_str[self.next_char_index]
-            if user_input != ord(next_char_expected):
-                self.incorrect_char_indexes.append(self.next_char_index)
-            self.next_char_index += 1
-            if self.next_char_index == self.input_str_len:
-                return True
-        return False
+def calculate_gross_wpm(num_correct_chars_typed, seconds_elapsed):
+    CHARS_PER_WORD = 5.0
+    words_typed = (num_correct_chars_typed / CHARS_PER_WORD)
+    return int(words_typed / minutes_elapsed(seconds_elapsed))
 
 
-def get_cursor_position(typing_progress, cols):
-    chars_left = typing_progress.next_char_index
-    for row, wrapped_line in enumerate(textwrap.wrap(typing_progress.input_str, cols)):
-        chars_left -= len(wrapped_line)
-        if chars_left < 0:
-            return (row, chars_left + len(wrapped_line))
-    raise ExitFailure('Cursor position fell off the end of the screen')
+def calculate_net_wpm(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed):
+    gross_wpm = calculate_gross_wpm(num_correct_chars_typed, seconds_elapsed)
+    net_wpm = gross_wpm - num_incorrect_chars_typed / minutes_elapsed(seconds_elapsed)
+    return max(0, int(net_wpm))
 
 
-def draw_screen(screen, term_dims, typing_progress, start_time, curr_time):
+def create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed):
+    gross_wpm = calculate_gross_wpm(num_correct_chars_typed, seconds_elapsed)
+    net_wpm = calculate_net_wpm(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
+    return 'Gross WPM: {} Errors: {} Net Wpm: {}'.format(gross_wpm, num_incorrect_chars_typed, net_wpm)
+
+
+def draw_screen(screen, term_dims, input_str, cursor_index, footer_str):
     screen.move(0, 0)
     screen.erase()
-    row = 0
-    for wrapped_line in textwrap.wrap(typing_progress.input_str, term_dims.cols):
-        if row == term_dims.rows:
-            break
+    wrapped_lines = textwrap.wrap(input_str, term_dims.cols)
+    for row, wrapped_line in enumerate(wrapped_lines[:term_dims.rows]):
         screen.addstr(row, 0, wrapped_line)
-        row += 1
     screen.move(term_dims.rows, 0)
-    if start_time:
-        time_elapsed = (curr_time - start_time)
-        wpm_calculator = WpmCalculator(typing_progress, time_elapsed)
-        screen.addstr(wpm_calculator.compute_wpm_str())
-    else:
-        screen.addstr(' Press any key to start, or Ctrl-C to exit'[:term_dims.cols - 1])
-    cursor_row, cursor_col = get_cursor_position(typing_progress, term_dims.cols)
+    screen.addstr(footer_str[:term_dims.cols - 1])
+    cursor_row, cursor_col = (cursor_index / term_dims.cols), (cursor_index % term_dims.cols)
     screen.move(cursor_row, cursor_col)
     screen.refresh()
 
@@ -112,25 +70,42 @@ def run_curses(screen, input_str):
     curses.use_default_colors()
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
-    NO_INPUT = -1
-    screen.timeout(50)
     term_dims = TerminalDimensions(screen)
-    typing_progress = TypingProgress(input_str)
-    start_time = None
+    incorrect_char_indexes = []
+    next_char_index = 0
+    draw_screen(screen, term_dims, input_str, 0, 'Press any key to begin or Ctrl-C to exit')
+    user_input = screen.getch()
+    start_time_seconds = time.time()
+    screen.timeout(50)
     while True:
         try:
+            KEY_DELETE = 127
+            if user_input == -1:
+                pass
+            elif user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
+                if next_char_index in incorrect_char_indexes:
+                    incorrect_char_indexes.remove(next_char_index)
+                next_char_index = max(0, next_char_index - 1)
+            else:
+                actual_next_char = input_str[next_char_index]
+                if user_input == ord(actual_next_char):
+                    next_char_index += 1
+                else:
+                    incorrect_char_indexes.append(next_char_index)
+                    next_char_index += 1
             term_dims.update(screen)
-            draw_screen(screen, term_dims, typing_progress, start_time, time.time())
-            user_input = screen.getch()
-            if user_input == NO_INPUT:
-                continue
-            if not start_time:
-                start_time = time.time()
-            if typing_progress.on_user_input(user_input):
+            seconds_elapsed = time.time() - start_time_seconds
+            num_incorrect_chars_typed = len(incorrect_char_indexes)
+            num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
+            wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
+            draw_screen(screen, term_dims, input_str, next_char_index, wpm_summary_str)
+            if next_char_index == len(input_str):
                 screen.timeout(0)
-                # press any key to continue
+                draw_screen(screen, term_dims, input_str, next_char_index, 'Press any key to exit') # todo fix
                 screen.getch()
                 return os.EX_OK
+
+            user_input = screen.getch()
         except KeyboardInterrupt:
             return os.EX_OK
 
@@ -154,8 +129,8 @@ def concat_lines(lines):
     return ' '.join(words)
 
 
-def run(args):
-    description = 'A command line words per minute test'
+def run():
+    description = 'A command line words per minute test using a file or stdin'
     arg_parser = argparse.ArgumentParser(description=description)
     arg_parser.add_argument('input_filepath', nargs='?')
     args = arg_parser.parse_args()
@@ -172,7 +147,7 @@ def main():
         raise ExitSuccess()
     signal.signal(signal.SIGTERM, sigterm_handler)
     try:
-        exit_code = run(sys.argv[1:])
+        exit_code = run()
     except ExitSuccess as e:
         exit_code = e.exit_code
     except ExitFailure as e:
