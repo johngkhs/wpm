@@ -2,6 +2,7 @@
 
 import argparse
 import curses
+import locale
 import os
 import signal
 import sys
@@ -27,7 +28,7 @@ class TerminalDimensions:
     def update(self, screen):
         term_dimensions = screen.getmaxyx()
         self.rows = term_dimensions[0] - 1
-        self.cols = term_dimensions[1]
+        self.columns = term_dimensions[1]
 
 
 def minutes_elapsed(seconds_elapsed):
@@ -53,16 +54,20 @@ def create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, s
     return 'Gross WPM: {} Errors: {} Net Wpm: {}'.format(gross_wpm, num_incorrect_chars_typed, net_wpm)
 
 
+def get_row_column(index, columns):
+    return (index / columns, index % columns)
+
+
 def draw_screen(screen, term_dims, input_str, cursor_index, footer_str):
     screen.move(0, 0)
     screen.erase()
-    wrapped_lines = textwrap.wrap(input_str, term_dims.cols)
+    wrapped_lines = textwrap.wrap(input_str, term_dims.columns)
     for row, wrapped_line in enumerate(wrapped_lines[:term_dims.rows]):
         screen.addstr(row, 0, wrapped_line)
     screen.move(term_dims.rows, 0)
-    screen.addstr(footer_str[:term_dims.cols - 1])
-    cursor_row, cursor_col = (cursor_index / term_dims.cols), (cursor_index % term_dims.cols)
-    screen.move(cursor_row, cursor_col)
+    screen.addstr(footer_str[:term_dims.columns - 1])
+    cursor_row, cursor_column = get_row_column(cursor_index, term_dims.columns)
+    screen.move(cursor_row, cursor_column)
     screen.refresh()
 
 
@@ -70,41 +75,43 @@ def run_curses(screen, input_str):
     curses.use_default_colors()
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
+    locale.setlocale(locale.LC_ALL, '')
     term_dims = TerminalDimensions(screen)
     incorrect_char_indexes = []
     next_char_index = 0
     draw_screen(screen, term_dims, input_str, 0, 'Press any key to begin or Ctrl-C to exit')
     user_input = screen.getch()
     start_time_seconds = time.time()
-    screen.timeout(50)
+    FIFTY_MILLIS = 50
+    screen.timeout(FIFTY_MILLIS)
+    NO_INPUT = -1
+    KEY_DELETE = 127
     while True:
         try:
-            KEY_DELETE = 127
-            if user_input == -1:
+            if user_input == NO_INPUT:
                 pass
             elif user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
-                if next_char_index in incorrect_char_indexes:
-                    incorrect_char_indexes.remove(next_char_index)
-                next_char_index = max(0, next_char_index - 1)
+                prev_char_index = max(0, next_char_index - 1)
+                if prev_char_index in incorrect_char_indexes:
+                    incorrect_char_indexes.remove(prev_char_index)
+                next_char_index = prev_char_index
             else:
-                actual_next_char = input_str[next_char_index]
-                if user_input == ord(actual_next_char):
-                    next_char_index += 1
-                else:
+                correct_next_char = input_str[next_char_index]
+                if user_input != ord(correct_next_char):
                     incorrect_char_indexes.append(next_char_index)
-                    next_char_index += 1
+                next_char_index += 1
             term_dims.update(screen)
             seconds_elapsed = time.time() - start_time_seconds
             num_incorrect_chars_typed = len(incorrect_char_indexes)
             num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
             wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
             draw_screen(screen, term_dims, input_str, next_char_index, wpm_summary_str)
-            if next_char_index == len(input_str):
+            typing_test_finished = (next_char_index == len(input_str) or seconds_elapsed >= 60)
+            if typing_test_finished:
                 screen.timeout(0)
                 draw_screen(screen, term_dims, input_str, next_char_index, 'Press any key to exit') # todo fix
                 screen.getch()
                 return os.EX_OK
-
             user_input = screen.getch()
         except KeyboardInterrupt:
             return os.EX_OK
@@ -122,7 +129,7 @@ def readlines_from_file_or_stdin(input_filepath):
         return sys.stdin.readlines()
 
 
-def concat_lines(lines):
+def concatenate_lines(lines):
     words = []
     for line in lines:
         words += line.replace('\t', ' ').rstrip().split()
@@ -138,7 +145,7 @@ def run():
         arg_parser.print_help()
         return os.EX_USAGE
     lines = readlines_from_file_or_stdin(args.input_filepath)
-    input_str = concat_lines(lines)
+    input_str = concatenate_lines(lines)
     return curses.wrapper(run_curses, input_str)
 
 
