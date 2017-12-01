@@ -58,7 +58,7 @@ def get_row_column(index, columns):
     return (index / columns, index % columns)
 
 
-def draw_screen(screen, term_dims, input_str, cursor_index, footer_str):
+def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, cursor_index, footer_str):
     screen.move(0, 0)
     screen.erase()
     wrapped_lines = textwrap.wrap(input_str, term_dims.columns)
@@ -66,6 +66,9 @@ def draw_screen(screen, term_dims, input_str, cursor_index, footer_str):
         screen.addstr(row, 0, wrapped_line)
     screen.move(term_dims.rows, 0)
     screen.addstr(footer_str[:term_dims.columns - 1])
+    for colored_index in colored_indexes:
+        colored_row, colored_column = get_row_column(colored_index, term_dims.columns)
+        screen.addch(colored_row, colored_column, input_str[colored_index], curses.color_pair(color_id))
     cursor_row, cursor_column = get_row_column(cursor_index, term_dims.columns)
     screen.move(cursor_row, cursor_column)
     screen.refresh()
@@ -75,11 +78,14 @@ def run_curses(screen, input_str):
     curses.use_default_colors()
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
+    ERROR_COLOR_ID = 1
+    DEFAULT_BACKGROUND_COLOR = -1
+    curses.init_pair(ERROR_COLOR_ID, curses.COLOR_RED, DEFAULT_BACKGROUND_COLOR)
     locale.setlocale(locale.LC_ALL, '')
     term_dims = TerminalDimensions(screen)
     incorrect_char_indexes = []
     next_char_index = 0
-    draw_screen(screen, term_dims, input_str, 0, 'Press any key to begin or Ctrl-C to exit')
+    draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, 'Press any key to begin or Ctrl-C to exit')
     user_input = screen.getch()
     start_time_seconds = time.time()
     FIFTY_MILLIS = 50
@@ -105,11 +111,11 @@ def run_curses(screen, input_str):
             num_incorrect_chars_typed = len(incorrect_char_indexes)
             num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
             wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
-            draw_screen(screen, term_dims, input_str, next_char_index, wpm_summary_str)
+            draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
             typing_test_finished = (next_char_index == len(input_str) or seconds_elapsed >= 60)
             if typing_test_finished:
                 screen.timeout(0)
-                draw_screen(screen, term_dims, input_str, next_char_index, 'Press any key to exit') # todo fix
+                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, 'Press any key to exit') # todo fix
                 screen.getch()
                 return os.EX_OK
             user_input = screen.getch()
