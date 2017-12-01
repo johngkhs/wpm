@@ -114,10 +114,10 @@ def run_curses(screen, input_str):
             draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
             typing_test_finished = (next_char_index == len(input_str) or seconds_elapsed >= 60)
             if typing_test_finished:
-                screen.timeout(0)
-                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, 'Press any key to exit') # todo fix
-                screen.getch()
-                return os.EX_OK
+                footer_str = '{} - Press Ctrl-C to exit'.format(wpm_summary_str)
+                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, footer_str)
+                while True:
+                    user_input = screen.getch()
             user_input = screen.getch()
         except KeyboardInterrupt:
             return os.EX_OK
@@ -142,6 +142,11 @@ def concatenate_lines(lines):
     return ' '.join(words)
 
 
+def change_stdin_to_terminal():
+    terminal_stdin = open('/dev/tty')
+    os.dup2(terminal_stdin.fileno(), 0)
+
+
 def run():
     description = 'A command line words per minute test using a file or stdin'
     arg_parser = argparse.ArgumentParser(description=description)
@@ -151,6 +156,8 @@ def run():
         arg_parser.print_help()
         return os.EX_USAGE
     lines = readlines_from_file_or_stdin(args.input_filepath)
+    if not sys.stdin.isatty():
+        change_stdin_to_terminal()
     input_str = concatenate_lines(lines)
     return curses.wrapper(run_curses, input_str)
 
