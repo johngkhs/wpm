@@ -54,22 +54,25 @@ def create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, s
     return 'Seconds: {:02d} Gross WPM: {:03d} Mistakes: {:03d} Net WPM: {:03d}'.format(int(seconds_elapsed), gross_wpm, num_incorrect_chars_typed, net_wpm)
 
 
-def get_row_column(index, columns):
-    return (index / columns, index % columns)
+def get_row_column(wrapped_lines, index):
+    for row, wrapped_line in enumerate(wrapped_lines):
+        if index < len(wrapped_line):
+            return row, index
+        index -= len(wrapped_line)
 
 
 def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, cursor_index, footer_str):
     screen.move(0, 0)
     screen.erase()
-    wrapped_lines = textwrap.wrap(input_str, term_dims.columns)
+    wrapped_lines = textwrap.wrap(input_str, term_dims.columns, subsequent_indent=' ')
     for row, wrapped_line in enumerate(wrapped_lines[:term_dims.rows]):
         screen.addstr(row, 0, wrapped_line)
     screen.move(term_dims.rows, 0)
     screen.addstr(footer_str[:term_dims.columns - 1])
     for colored_index in colored_indexes:
-        colored_row, colored_column = get_row_column(colored_index, term_dims.columns)
+        colored_row, colored_column = get_row_column(wrapped_lines, colored_index)
         screen.addch(colored_row, colored_column, input_str[colored_index], curses.color_pair(color_id))
-    cursor_row, cursor_column = get_row_column(cursor_index, term_dims.columns)
+    cursor_row, cursor_column = get_row_column(wrapped_lines, cursor_index)
     screen.move(cursor_row, cursor_column)
     screen.refresh()
 
