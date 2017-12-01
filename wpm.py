@@ -93,34 +93,31 @@ def run_curses(screen, input_str):
     NO_INPUT = -1
     KEY_DELETE = 127
     while True:
-        try:
-            if user_input == NO_INPUT:
-                pass
-            elif user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
-                prev_char_index = max(0, next_char_index - 1)
-                if prev_char_index in incorrect_char_indexes:
-                    incorrect_char_indexes.remove(prev_char_index)
-                next_char_index = prev_char_index
-            else:
-                correct_next_char = input_str[next_char_index]
-                if user_input != ord(correct_next_char):
-                    incorrect_char_indexes.append(next_char_index)
-                next_char_index += 1
-            term_dims.update(screen)
-            seconds_elapsed = time.time() - start_time_seconds
-            num_incorrect_chars_typed = len(incorrect_char_indexes)
-            num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
-            wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
-            draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
-            typing_test_finished = (next_char_index == len(input_str) or seconds_elapsed >= 60)
-            if typing_test_finished:
-                footer_str = '{} - Press Ctrl-C to exit'.format(wpm_summary_str)
-                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, footer_str)
-                while True:
-                    user_input = screen.getch()
-            user_input = screen.getch()
-        except KeyboardInterrupt:
-            return os.EX_OK
+        if user_input == NO_INPUT:
+            pass
+        elif user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
+            prev_char_index = max(0, next_char_index - 1)
+            if prev_char_index in incorrect_char_indexes:
+                incorrect_char_indexes.remove(prev_char_index)
+            next_char_index = prev_char_index
+        else:
+            correct_next_char = input_str[next_char_index]
+            if user_input != ord(correct_next_char):
+                incorrect_char_indexes.append(next_char_index)
+            next_char_index += 1
+        term_dims.update(screen)
+        seconds_elapsed = time.time() - start_time_seconds
+        num_incorrect_chars_typed = len(incorrect_char_indexes)
+        num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
+        wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
+        draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
+        typing_test_finished = (next_char_index == len(input_str) or seconds_elapsed >= 60)
+        if typing_test_finished:
+            footer_str = '{} - Press Ctrl-C to exit'.format(wpm_summary_str)
+            draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, footer_str)
+            while True:
+                user_input = screen.getch()
+        user_input = screen.getch()
 
 
 def readlines_from_file(input_filepath):
@@ -165,6 +162,8 @@ def main():
     signal.signal(signal.SIGTERM, sigterm_handler)
     try:
         exit_code = run()
+    except KeyboardInterrupt:
+        exit_code = os.EX_OK
     except ExitSuccess as e:
         exit_code = e.exit_code
     except ExitFailure as e:
