@@ -51,7 +51,7 @@ def calculate_net_wpm(num_incorrect_chars_typed, num_correct_chars_typed, second
 def create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed):
     gross_wpm = calculate_gross_wpm(num_correct_chars_typed, seconds_elapsed)
     net_wpm = calculate_net_wpm(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
-    return 'Gross WPM: {} Errors: {} Net Wpm: {}'.format(gross_wpm, num_incorrect_chars_typed, net_wpm)
+    return 'Seconds: {:02d} Gross WPM: {:03d} Mistakes: {:03d} Net WPM: {:03d}'.format(int(seconds_elapsed), gross_wpm, num_incorrect_chars_typed, net_wpm)
 
 
 def get_row_column(index, columns):
@@ -93,7 +93,7 @@ def run_curses(screen, input_str):
     NO_INPUT = -1
     KEY_DELETE = 127
     while True:
-        if user_input == NO_INPUT:
+        if user_input == NO_INPUT or user_input == curses.KEY_RESIZE:
             pass
         elif user_input == KEY_DELETE or user_input == curses.KEY_BACKSPACE:
             prev_char_index = max(0, next_char_index - 1)
@@ -111,7 +111,8 @@ def run_curses(screen, input_str):
         num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
         wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
         draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
-        typing_test_finished = (next_char_index == len(input_str) or seconds_elapsed >= 60)
+        last_visible_char_index = min(len(input_str), (term_dims.rows - 1) * term_dims.columns)
+        typing_test_finished = (next_char_index == last_visible_char_index or seconds_elapsed >= 60)
         if typing_test_finished:
             footer_str = '{} - Press Ctrl-C to exit'.format(wpm_summary_str)
             draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, footer_str)
