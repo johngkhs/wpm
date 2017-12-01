@@ -123,16 +123,13 @@ def run_curses(screen, input_str):
             return os.EX_OK
 
 
-def readlines_from_file_or_stdin(input_filepath):
-    if input_filepath:
-        try:
-            input_file = open(input_filepath, 'r')
-        except EnvironmentError:
-            raise ExitFailure(os.EX_NOINPUT, '{}: No such file or directory'.format(input_filepath))
-        with input_file:
-            return input_file.readlines()
-    else:
-        return sys.stdin.readlines()
+def readlines_from_file(input_filepath):
+    try:
+        input_file = open(input_filepath, 'r')
+    except EnvironmentError:
+        raise ExitFailure(os.EX_NOINPUT, '{}: No such file or directory'.format(input_filepath))
+    with input_file:
+        return input_file.readlines()
 
 
 def concatenate_lines(lines):
@@ -155,10 +152,10 @@ def run():
     if sys.stdin.isatty() and not args.input_filepath:
         arg_parser.print_help()
         return os.EX_USAGE
-    lines = readlines_from_file_or_stdin(args.input_filepath)
+    lines = readlines_from_file(args.input_filepath) if args.input_filepath else sys.stdin.readlines()
+    input_str = concatenate_lines(lines)
     if not sys.stdin.isatty():
         change_stdin_to_terminal()
-    input_str = concatenate_lines(lines)
     return curses.wrapper(run_curses, input_str)
 
 
