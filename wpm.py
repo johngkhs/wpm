@@ -34,7 +34,7 @@ def lookup_terminal_dimensions(screen):
     return TerminalDimensions(rows, columns)
 
 
-def get_row_column(wrapped_terminal_lines, index):
+def calculate_row_column(wrapped_terminal_lines, index):
     remaining_index = index
     for row, wrapped_line in enumerate(wrapped_terminal_lines):
         if remaining_index < len(wrapped_line):
@@ -82,10 +82,10 @@ def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, footer_
     screen.addstr(footer_str[:term_dims.columns - 1])
     for colored_index in colored_indexes:
         if colored_index < wrapped_total_length:
-            row, column = get_row_column(wrapped_terminal_lines, colored_index)
+            row, column = calculate_row_column(wrapped_terminal_lines, colored_index)
             screen.addch(row, column, input_str[colored_index], curses.color_pair(color_id))
     if cursor_index is not None:
-        row, column = get_row_column(wrapped_terminal_lines, cursor_index)
+        row, column = calculate_row_column(wrapped_terminal_lines, cursor_index)
         screen.move(row, column)
     screen.refresh()
 
