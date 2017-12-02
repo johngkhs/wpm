@@ -31,6 +31,20 @@ class TerminalDimensions:
         self.columns = term_dimensions[1]
 
 
+class RowColumn:
+    def __init__(self, row, column):
+        self.row = row
+        self.column = column
+
+
+def get_row_column(wrapped_terminal_lines, index):
+    for row, wrapped_line in enumerate(wrapped_terminal_lines):
+        if index < len(wrapped_line):
+            return RowColumn(row, index)
+        index -= len(wrapped_line)
+    return None
+
+
 def minutes_elapsed(seconds_elapsed):
     SECONDS_PER_MINUTE = 60.0
     return (seconds_elapsed / SECONDS_PER_MINUTE)
@@ -51,30 +65,41 @@ def calculate_net_wpm(num_incorrect_chars_typed, num_correct_chars_typed, second
 def create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed):
     gross_wpm = calculate_gross_wpm(num_correct_chars_typed, seconds_elapsed)
     net_wpm = calculate_net_wpm(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
-    return 'Seconds: {:02d} Gross WPM: {:03d} Mistakes: {:03d} Net WPM: {:03d}'.format(int(seconds_elapsed), gross_wpm, num_incorrect_chars_typed, net_wpm)
+    return 'Time: {:02d}s Errors: {:03d} Wpm: {:03d}'.format(int(seconds_elapsed), num_incorrect_chars_typed, net_wpm)
 
 
-def get_row_column(wrapped_lines, index):
-    for row, wrapped_line in enumerate(wrapped_lines):
-        if index < len(wrapped_line):
-            return row, index
-        index -= len(wrapped_line)
+def wrap_terminal_lines(input_str, term_dims):
+    return textwrap.wrap(input_str, term_dims.columns, subsequent_indent=' ')[:term_dims.rows]
 
 
 def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, cursor_index, footer_str):
     screen.move(0, 0)
     screen.erase()
-    wrapped_lines = textwrap.wrap(input_str, term_dims.columns, subsequent_indent=' ')
-    for row, wrapped_line in enumerate(wrapped_lines[:term_dims.rows]):
+    wrapped_terminal_lines = wrap_terminal_lines(input_str, term_dims)
+    for row, wrapped_line in enumerate(wrapped_terminal_lines):
         screen.addstr(row, 0, wrapped_line)
     screen.move(term_dims.rows, 0)
     screen.addstr(footer_str[:term_dims.columns - 1])
     for colored_index in colored_indexes:
-        colored_row, colored_column = get_row_column(wrapped_lines, colored_index)
-        screen.addch(colored_row, colored_column, input_str[colored_index], curses.color_pair(color_id))
-    cursor_row, cursor_column = get_row_column(wrapped_lines, cursor_index)
-    screen.move(cursor_row, cursor_column)
+        row_column = get_row_column(wrapped_terminal_lines, colored_index)
+        if row_column:
+            screen.addch(row_column.row, row_column.column, input_str[colored_index], curses.color_pair(color_id))
+    cursor_row_column = get_row_column(wrapped_terminal_lines, cursor_index)
+    if cursor_row_column:
+        screen.move(cursor_row_column.row, cursor_row_column.column)
     screen.refresh()
+
+
+def is_typing_test_finished(input_str, term_dims, next_char_index, seconds_elapsed):
+    wrapped_terminal_lines = wrap_terminal_lines(input_str, term_dims)
+    wrapped_terminal_total_length = sum(len(line) for line in wrapped_terminal_lines)
+    end_char_index = min(wrapped_terminal_total_length, len(input_str))
+    if seconds_elapsed >= 60:
+        return True
+    elif next_char_index >= end_char_index:
+        return True
+    else:
+        return False
 
 
 def run_curses(screen, input_str):
@@ -114,12 +139,11 @@ def run_curses(screen, input_str):
         num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
         wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
         draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
-        last_visible_char_index = min(len(input_str), (term_dims.rows - 1) * term_dims.columns)
-        typing_test_finished = (next_char_index == last_visible_char_index or seconds_elapsed >= 60)
-        if typing_test_finished:
-            footer_str = '{} - Press Ctrl-C to exit'.format(wpm_summary_str)
-            draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, footer_str)
+        if is_typing_test_finished(input_str, term_dims, next_char_index, seconds_elapsed):
+            exit_str = 'Press Ctrl-C to exit - {}'.format(wpm_summary_str)
             while True:
+                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, exit_str)
+                term_dims.update(screen)
                 user_input = screen.getch()
         user_input = screen.getch()
 
@@ -155,6 +179,8 @@ def run():
         return os.EX_USAGE
     lines = readlines_from_file(args.input_filepath) if args.input_filepath else sys.stdin.readlines()
     input_str = concatenate_lines(lines)
+    if not input_str:
+        return os.EX_OK
     if not sys.stdin.isatty():
         change_stdin_to_terminal()
     return curses.wrapper(run_curses, input_str)
