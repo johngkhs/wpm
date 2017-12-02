@@ -27,7 +27,7 @@ class TerminalDimensions:
         self.columns = columns
 
 
-def calculate_terminal_dimensions(screen):
+def lookup_terminal_dimensions(screen):
     term_dimensions = screen.getmaxyx()
     rows = term_dimensions[0] - 1
     columns = term_dimensions[1]
@@ -106,10 +106,9 @@ def run_curses(screen, input_str):
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
     ERROR_COLOR_ID = 1
-    DEFAULT_BACKGROUND_COLOR = -1
-    curses.init_pair(ERROR_COLOR_ID, curses.COLOR_RED, DEFAULT_BACKGROUND_COLOR)
+    curses.init_pair(ERROR_COLOR_ID, curses.COLOR_BLACK, curses.COLOR_RED)
     locale.setlocale(locale.LC_ALL, '')
-    term_dims = calculate_terminal_dimensions(screen)
+    term_dims = lookup_terminal_dimensions(screen)
     incorrect_char_indexes = []
     next_char_index = 0
     START_STR = 'Press any key to begin or Ctrl-C to exit'
@@ -133,7 +132,7 @@ def run_curses(screen, input_str):
             if user_input != ord(correct_next_char):
                 incorrect_char_indexes.append(next_char_index)
             next_char_index += 1
-        term_dims = calculate_terminal_dimensions(screen)
+        term_dims = lookup_terminal_dimensions(screen)
         seconds_elapsed = time.time() - start_time_seconds
         num_incorrect_chars_typed = len(incorrect_char_indexes)
         num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
@@ -143,7 +142,7 @@ def run_curses(screen, input_str):
             NOT_VISIBLE = 0
             curses.curs_set(NOT_VISIBLE)
             while True:
-                term_dims = calculate_terminal_dimensions(screen)
+                term_dims = lookup_terminal_dimensions(screen)
                 draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, exit_str)
                 user_input = screen.getch()
         draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, wpm_summary_str, cursor_index=next_char_index)
