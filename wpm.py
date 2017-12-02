@@ -69,10 +69,10 @@ def create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, s
 
 
 def wrap_terminal_lines(input_str, term_dims):
-    return textwrap.wrap(input_str, term_dims.columns, subsequent_indent=' ')[:term_dims.rows]
+    return textwrap.wrap(input_str, term_dims.columns, drop_whitespace=False)[:term_dims.rows]
 
 
-def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, cursor_index, footer_str):
+def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, footer_str, cursor_index=None):
     screen.move(0, 0)
     screen.erase()
     wrapped_terminal_lines = wrap_terminal_lines(input_str, term_dims)
@@ -84,8 +84,8 @@ def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, cursor_
         row_column = get_row_column(wrapped_terminal_lines, colored_index)
         if row_column:
             screen.addch(row_column.row, row_column.column, input_str[colored_index], curses.color_pair(color_id))
-    cursor_row_column = get_row_column(wrapped_terminal_lines, cursor_index)
-    if cursor_row_column:
+    if cursor_index is not None:
+        cursor_row_column = get_row_column(wrapped_terminal_lines, cursor_index)
         screen.move(cursor_row_column.row, cursor_row_column.column)
     screen.refresh()
 
@@ -113,7 +113,8 @@ def run_curses(screen, input_str):
     term_dims = TerminalDimensions(screen)
     incorrect_char_indexes = []
     next_char_index = 0
-    draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, 'Press any key to begin or Ctrl-C to exit')
+    START_STR = 'Press any key to begin or Ctrl-C to exit'
+    draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, START_STR, cursor_index=next_char_index)
     user_input = screen.getch()
     start_time_seconds = time.time()
     FIFTY_MILLIS = 50
@@ -138,13 +139,13 @@ def run_curses(screen, input_str):
         num_incorrect_chars_typed = len(incorrect_char_indexes)
         num_correct_chars_typed = next_char_index - num_incorrect_chars_typed
         wpm_summary_str = create_wpm_summary_str(num_incorrect_chars_typed, num_correct_chars_typed, seconds_elapsed)
-        draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, wpm_summary_str)
         if is_typing_test_finished(input_str, term_dims, next_char_index, seconds_elapsed):
             exit_str = 'Press Ctrl-C to exit - {}'.format(wpm_summary_str)
             while True:
-                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, next_char_index, exit_str)
                 term_dims.update(screen)
+                draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, exit_str)
                 user_input = screen.getch()
+        draw_screen(screen, term_dims, input_str, ERROR_COLOR_ID, incorrect_char_indexes, wpm_summary_str, cursor_index=next_char_index)
         user_input = screen.getch()
 
 
