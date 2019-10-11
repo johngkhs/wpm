@@ -1,13 +1,20 @@
 #!/usr/bin/env python
 
+from __future__ import unicode_literals
+from builtins import dict, str
+
 import argparse
 import curses
 import locale
+import io
 import os
 import signal
 import sys
 import textwrap
 import time
+
+
+ENCODING = 'utf8'
 
 
 class ExitSuccess(Exception):
@@ -77,13 +84,13 @@ def draw_screen(screen, term_dims, input_str, color_id, colored_indexes, footer_
     screen.erase()
     wrapped_terminal_lines, wrapped_total_length = wrap_terminal_lines(input_str, term_dims)
     for row, wrapped_line in enumerate(wrapped_terminal_lines):
-        screen.addstr(row, 0, wrapped_line)
+      screen.addstr(row, 0, wrapped_line.encode(ENCODING))
     screen.move(term_dims.rows, 0)
-    screen.addstr(footer_str[:term_dims.columns - 1])
+    screen.addstr(footer_str[:term_dims.columns - 1].encode(ENCODING))
     for colored_index in colored_indexes:
         if colored_index < wrapped_total_length:
             row, column = calculate_row_column(wrapped_terminal_lines, colored_index)
-            screen.addch(row, column, input_str[colored_index], curses.color_pair(color_id))
+            screen.addstr(row, column, input_str[colored_index].encode(ENCODING), curses.color_pair(color_id))
     if cursor_index is not None:
         row, column = calculate_row_column(wrapped_terminal_lines, cursor_index)
         screen.move(row, column)
@@ -102,6 +109,7 @@ def is_typing_test_finished(input_str, term_dims, next_char_index, seconds_elaps
 
 
 def run_curses(screen, input_str):
+    curses.start_color()
     curses.use_default_colors()
     VERY_VISIBLE = 2
     curses.curs_set(VERY_VISIBLE)
@@ -151,11 +159,11 @@ def run_curses(screen, input_str):
 
 def readlines_from_file(input_filepath):
     try:
-        input_file = open(input_filepath, 'r')
+        input_file = io.open(input_filepath, 'r', encoding=ENCODING)
     except EnvironmentError:
         raise ExitFailure(os.EX_NOINPUT, '{}: No such file or directory'.format(input_filepath))
     with input_file:
-        return input_file.readlines()
+      return input_file.readlines()
 
 
 def concatenate_lines(lines):
